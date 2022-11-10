@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_documentation element="u_implementation_id" label="Implementation ID" language="en" table="var__m_var_dictionary_1a9507fadb20330072d884da0b9619c1">
+        <sys_documentation action="INSERT_OR_UPDATE">
+            <element>u_implementation_id</element>
+            <help/>
+            <hint/>
+            <label>Implementation ID</label>
+            <language>en</language>
+            <name>var__m_var_dictionary_1a9507fadb20330072d884da0b9619c1</name>
+            <plural>Implementation ID</plural>
+            <sys_class_name>sys_documentation</sys_class_name>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2019-04-05 14:51:36</sys_created_on>
+            <sys_id>6e074bfadb20330072d884da0b96193d</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>Implementation ID</sys_name>
+            <sys_package display_value="EclecticIQ Platform - Threat Lookup" source="x_336871_eclectici">b62b8956db64330072d884da0b96192e</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="EclecticIQ Platform - Threat Lookup">b62b8956db64330072d884da0b96192e</sys_scope>
+            <sys_update_name>sys_documentation_var__m_var_dictionary_1a9507fadb20330072d884da0b9619c1_u_implementation_id_en</sys_update_name>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2019-04-05 14:51:36</sys_updated_on>
+            <url/>
+            <url_target/>
+        </sys_documentation>
+    </sys_documentation>
+</record_update>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_rest_message_headers">
+    <sys_rest_message_headers action="INSERT_OR_UPDATE">
+        <name>Content-Type</name>
+        <rest_message display_value="EclecticIQ get group">96ae4e3fdb60330072d884da0b9619a6</rest_message>
+        <sys_class_name>sys_rest_message_headers</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2019-04-08 13:19:44</sys_created_on>
+        <sys_id>72beca3fdb60330072d884da0b961949</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Content-Type</sys_name>
+        <sys_package display_value="EclecticIQ Platform - Threat Lookup" source="x_336871_eclectici">b62b8956db64330072d884da0b96192e</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="EclecticIQ Platform - Threat Lookup">b62b8956db64330072d884da0b96192e</sys_scope>
+        <sys_update_name>sys_rest_message_headers_72beca3fdb60330072d884da0b961949</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2019-04-08 13:19:44</sys_updated_on>
+        <value>application/json</value>
+    </sys_rest_message_headers>
+</record_update>

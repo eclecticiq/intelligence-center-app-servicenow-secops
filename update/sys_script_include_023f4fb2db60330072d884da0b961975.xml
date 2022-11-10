@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_336871_eclectici.eiqLookuptUtil</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>eiqLookuptUtil</name>
+        <script><![CDATA[var eiqLookuptUtil = Class.create();
+eiqLookuptUtil.prototype = {
+	_INTEGRATION_ITEM_CONFIG: "sn_sec_core_integration_item_config",
+    _INTEGRATION_CAP_IMPL: "sn_sec_cmn_integration_capability_implementation",
+	_INTEGRATION_ID: null,
+	_DOMAIN_ID: "global",
+
+	_EIQ_AUTH_TOKEN: null,
+	_EIQ_REST_AUTH: "EclecticIQ auth",
+	_EIQ_REST_GET_GROUP: "EclecticIQ get group",
+	_EIQ_REST_GET_OBSERVABLE: "EclecticIQ get observable",
+	_EIQ_REST_GET_ENTITY: "EclecticIQ get entity",
+	_EIQ_REST_CREATE_SIGHTING: "EclecticIQ create sighting",
+	
+	_OBS_TYPE_LOOKUP_TYPE_MAPPING: {
+		"5d0b43809f81120035c6786f957fcf71" : "ipv4",
+		"e01d47809f81120035c6786f957fcf3b" : "hash-md5",
+		"392d47809f81120035c6786f957fcf0e" : "hash-sha1",
+		"de3d47809f81120035c6786f957fcf11" : "hash-sha256",
+		"0afa16f0678222002e640731b2415a23" : "hash-sha512",
+		"555d47809f81120035c6786f957fcf72" : "domain",
+		"098d47809f81120035c6786f957fcfa4" : "email",
+		"ec9d47809f81120035c6786f957fcfa7" : "uri",
+		"b69d47809f81120035c6786f957fcfab" : "uri"
+	},
+	
+	initialize: function(implementationId, domainId) {		
+		if (gs.nil(implementationId))
+			gs.error(gs.getMessage("Demo Enrichment script include needs to be initialized with an implementation ID"));
+		//Look up the capability.
+		var intId = null;
+		var gr = new GlideRecord(this._INTEGRATION_CAP_IMPL);
+		gr.addActiveQuery();
+		gr.addQuery('sys_id', implementationId);
+		gr.query();
+		if (gr.next())
+			intId = gr.getValue('integration');
+		if (gs.nil(intId))
+			gs.error(gs.getMessage("DemoIntegration script include needs to be initialized with an integration ID"));
+
+		this._INTEGRATION_ID = intId;
+		//Load up the configurations.
+		this.config = this.getConfigurations();
+
+		if (!gs.nil(domainId))
+			this._DOMAIN_ID = domainId;	
+		
+		//Create the REST Request
+		var restMessage = new sn_ws.RESTMessageV2(this._EIQ_REST_AUTH, "post");
+		restMessage.setStringParameter("platform_url", this.config.platform_url.value);
+		var obj = {
+                    'username': this.config.platform_user.value,
+                    'password': this.config.platform_password.value
+                };
+		var str = JSON.stringify(obj);
+		restMessage.setRequestBody(str);
+
+		var response = restMessage.execute();
+		var responseBody = response.getBody();
+		var httpStatus = response.getStatusCode();
+				
+		if (httpStatus != 200) {
+			//Handle your error codes here.
+			throw new Error("Unsuccessful response from server. status code: " + httpStatus);
+		}
+
+		var parsed_response = JSON.parse(responseBody);
+		this._EIQ_AUTH_TOKEN = "Bearer " + parsed_response.token;
+	},
+	
+	isValidClass: function() {
+		return !gs.nil(this._INTEGRATION_ID) && !gs.nil(this._EIQ_AUTH_TOKEN);
+	},
+	
+	filterObservables: function(observableIds) {
+		if (gs.nil(observableIds))
+			return [];
+
+ 		if (Object.prototype.toString.call(observableIds) === '[object Array]')
+ 			observableIds = observableIds.join(',');
+
+		var filteredObservableIds = [];
+		gr = new GlideRecord('sn_ti_observable');
+		gr.addQuery('sys_id', 'IN', observableIds).addCondition('type', 'IN', Object.keys(this._OBS_TYPE_LOOKUP_TYPE_MAPPING).join(','));
+		gr.query();
+		while (gr.next())
+			filteredObservableIds.push(gr.getUniqueValue() + '');
+
+		return filteredObservableIds;
+	},
+
+	getConfigurations: function() {
+		var configs = new GlideRecord(this._INTEGRATION_ITEM_CONFIG);
+		configs.addQuery("integration", this._INTEGRATION_ID);
+		//configs.addQuery("integration.plugin_id", "com.snc.threat.virustotal");
+		
+		configs.query();
+
+		var configObj = {};
+		while (configs.next()) {
+				configObj[configs.getValue("name")] = {
+				sys_id: configs.getUniqueValue(),
+				name: configs.getValue("name"),
+				label: configs.getValue("label"),
+				value: configs.getValue("value")
+			};
+
+			if (configs.getValue("elem_type") == "password" && !gs.nil(configs.password_value)) {
+				configObj[configs.getValue("name")].value = configs.password_value.getDecryptedValue();
+			}
+			if (configs.getValue("elem_type") == "boolean") {
+				configObj[configs.getValue("name")].value = configs.getValue("value") == "true";
+			}
+		}
+
+		return configObj;
+	},
+	
+	getLookupType: function(obsType) {
+		var lookupType = null;
+		var gr = new GlideRecord('sn_ti_observable_type');
+		if (gr.get(obsType)) {
+			lookupType = this._OBS_TYPE_LOOKUP_TYPE_MAPPING[obsType + ''];
+		}
+		return lookupType;
+	},
+
+	enrichObservable: function(trackingId, observableId) {
+		var observable = {};
+		observable.sys_id = observableId;
+		var observablesGr = new GlideRecord('sn_ti_observable');
+		observablesGr.get(observableId);
+		observable.value = "" + observablesGr.value;
+		observable.type = "" + observablesGr.type;
+		observable.eiq_type = this.getLookupType(observable.type);
+
+		//Create the REST Request
+		var ObsRestMessage = new sn_ws.RESTMessageV2(this._EIQ_REST_GET_OBSERVABLE, "get");
+		ObsRestMessage.setStringParameter("obs_type", observable.eiq_type);
+		ObsRestMessage.setStringParameter("obs_value", observable.value);
+		ObsRestMessage.setStringParameter("platform_url", this.config.platform_url.value);
+		ObsRestMessage.setRequestHeader("Authorization", this._EIQ_AUTH_TOKEN);
+
+		var ObsResponse = ObsRestMessage.execute();
+		var ObsResponseBody = ObsResponse.getBody();
+		var ObsHttpStatus = ObsResponse.getStatusCode();
+				
+		if (ObsHttpStatus != 200) {
+			//Handle your error codes here.
+			throw new Error("Unsuccessful response from server. status code: " + httpStatus);
+		}
+
+		var parsed_response_observable = JSON.parse(ObsResponseBody);
+		
+		//Create the REST Request
+		var EntityRestMessage = new sn_ws.RESTMessageV2(this._EIQ_REST_GET_ENTITY, "get");
+		EntityRestMessage.setStringParameter("value", observable.value);		
+		EntityRestMessage.setStringParameter("platform_url", this.config.platform_url.value);
+		EntityRestMessage.setRequestHeader("Authorization", this._EIQ_AUTH_TOKEN);
+
+		var EntityResponse = EntityRestMessage.execute();
+		var EntityResponseBody = EntityResponse.getBody();
+		var EntityHttpStatus = EntityResponse.getStatusCode();
+				
+		if (EntityHttpStatus != 200) {
+			//Handle your error codes here.
+			throw new Error("Unsuccessful response from server. status code: " + httpStatus);
+		}
+
+		var parsed_response_entity = JSON.parse(EntityResponseBody);
+		
+		var serviceResult = {};
+		
+		if (parsed_response_observable.total_count > 0) {
+			serviceResult.maliciousness = parsed_response_observable.data[0].meta.maliciousness;
+			serviceResult.last_updated = parsed_response_observable.data[0].last_updated_at;
+			serviceResult.platform_link = this.config.platform_url.value + "/main/intel/all/browse/observable?id=" + parsed_response_observable.data[0].id;
+			if (this.config.platform_sightings_auto.value) {
+				var sightings_result = this._createSighting(observable);
+				// add logging
+			}
+		} else {	
+			var b = 1;
+		}
+		
+		serviceResult.entity_name = "";		
+		if (parsed_response_entity.hits.total > 0) {
+			for (var i = 0; i < parsed_response_entity.hits.total; i++) {
+				if (i != 0) {
+					serviceResult.entity_name += ", ";
+				}
+						serviceResult.entity_name += parsed_response_entity.hits.hits[i]._source.data.title;
+			}
+		} else {
+			serviceResult.entity_name = "N/A";
+		}
+		
+		serviceResult.observable_value = observable.value;
+		
+		//Determine if this is malicious.
+		var result = this._createLookupResult(trackingId, observable, serviceResult);
+
+		return result;
+	},
+
+	_createSighting: function(record) {
+
+        var extract_kind = record.eiq_type;
+        var extract_value = record.value;
+        var source = this._getGroupUid();
+        var title = "ServiceNow Sighting - " + extract_kind + ":" + extract_value;
+
+        var sighting = {"data": {
+            "data": {
+                "confidence": {
+                    "type": "confidence",
+                    "value": "Medium"
+                },
+                "description": "Sighting created by ServiceNow Security Operations",
+                "description_structuring_format": "html",
+                "type": "eclecticiq-sighting",
+                "title": title,
+                "security_control": {
+                    "type": "information-source",
+                    "identity": {
+                        "name": "EclecticIQ Platform App for ServiceNow",
+                        "type": "identity"
+                    },
+                    "time": {
+                        "type": "time",
+                        "start_time_precision": "second"
+                    }
+                },
+            },
+            "meta": {
+                "manual_extracts": [
+                    {
+                        "link_type": "sighted",
+                        "classification": "bad",
+                        "kind": extract_kind,
+                        "value": extract_value
+                    }
+                ],
+                "taxonomy": [],
+                "tags": ["ServiceNow IR sighting"]                
+            },
+            "sources": [{
+                "source_id": source
+            }]
+        }};
+
+        var str_sighting = JSON.stringify(sighting);
+
+		var SightingRestMessage = new sn_ws.RESTMessageV2(this._EIQ_REST_CREATE_SIGHTING, "post");
+		SightingRestMessage.setStringParameter("platform_url", this.config.platform_url.value);
+		SightingRestMessage.setRequestHeader("Authorization", this._EIQ_AUTH_TOKEN);
+		SightingRestMessage.setRequestBody(str_sighting);
+
+		var SightingResponse = SightingRestMessage.execute();
+		var SightingResponseBody = SightingResponse.getBody();
+		var SightingHttpStatus = SightingResponse.getStatusCode();
+				
+		if (SightingHttpStatus != 200 && SightingHttpStatus != 201) {
+			//Handle your error codes here.
+			throw new Error("Unsuccessful response from server. status code: " + SightingHttpStatus);
+		}
+
+	},
+
+	_getGroupUid: function() {
+
+		var GroupRestMessage = new sn_ws.RESTMessageV2(this._EIQ_REST_GET_GROUP, "get");
+		GroupRestMessage.setStringParameter("group_name", this.config.platform_group.value);
+		GroupRestMessage.setStringParameter("platform_url", this.config.platform_url.value);
+		GroupRestMessage.setRequestHeader("Authorization", this._EIQ_AUTH_TOKEN);
+
+		var GroupResponse = GroupRestMessage.execute();
+		var GroupResponseBody = GroupResponse.getBody();
+		var GroupHttpStatus = GroupResponse.getStatusCode();
+				
+		if (GroupHttpStatus != 200) {
+			//Handle your error codes here.
+			throw new Error("Unsuccessful response from server. status code: " + httpStatus);
+		}
+
+		var parsed_response_group = JSON.parse(GroupResponseBody);
+
+		try {
+			var group_id = parsed_response_group.data[0].source;
+			
+			return group_id;			
+		} catch (e){
+			if (GroupHttpStatus != 200) {
+				result = "Unsuccessful response from server. HTTP Status: " + GroupHttpStatus;
+				return result;
+			}
+
+			result = "No " + newSightingsGroup + " group name found.";
+			return result;
+		}
+
+	},
+
+	_createLookupResult: function(trackingId, observable, serviceResult) {
+		
+		var isMalicious = false;
+		var result = "passed";		
+		var finding = "Unknown";
+		if (serviceResult.maliciousness)
+			finding = "Malicious";		
+		serviceResult.finding = finding;
+		serviceResult.observable_sys_id = observable.sys_id;
+		
+		var gr = new GlideRecord('sn_ti_lookup_result');		
+		gr.initialize();		
+		gr.setValue('observable', observable.sys_id);
+		gr.setValue('source_engine', 'EclecticIQ Platform');
+		gr.setValue('source_engine_version', '1.0');
+		gr.setValue('vendor', this._INTEGRATION_ID);
+		gr.setValue('sys_domain', this._DOMAIN_ID);
+		gr.setValue('finding', finding);
+		gr.setValue('external_link', serviceResult.platform_link);
+		gr.setValue('result', result);		
+		// if (!gs.nil(taskId)) {
+		// 	gr.setValue('ref_table', 'sn_sec_cmn_integration_capability_execution');
+		// }
+		
+		gr.setValue('raw_data', JSON.stringify(serviceResult));
+		gr.setValue('details', JSON.stringify(serviceResult.entity_name));
+		gr.insert();
+		
+		return true;
+	},
+	
+	type: 'eiqLookuptUtil'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2019-04-05 15:27:48</sys_created_on>
+        <sys_id>023f4fb2db60330072d884da0b961975</sys_id>
+        <sys_mod_count>13</sys_mod_count>
+        <sys_name>eiqLookuptUtil</sys_name>
+        <sys_package display_value="EclecticIQ Platform - Threat Lookup" source="x_336871_eclectici">b62b8956db64330072d884da0b96192e</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="EclecticIQ Platform - Threat Lookup">b62b8956db64330072d884da0b96192e</sys_scope>
+        <sys_update_name>sys_script_include_023f4fb2db60330072d884da0b961975</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2019-05-02 13:07:07</sys_updated_on>
+    </sys_script_include>
+</record_update>
